@@ -13,6 +13,8 @@
 #include "mqtt.h"
 #include "wifi.h"
 
+#include "bmp280.h"
+
 #define TAG "main"
 
 TaskHandle_t task_mqtt;

@@ -1,0 +1,4 @@
+dependencies:
+  pkwasniok/bmp280:
+    git: "https://github.com/pkwasniok/esp-bmp280"
+    version: "dev"
