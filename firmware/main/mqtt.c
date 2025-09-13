@@ -88,3 +88,14 @@ void mqtt_publish(char* topic, char* data) {
     esp_mqtt_client_publish(mqtt_client, topic, data, strlen(data), 0, 1);
 }
 
+void mqtt_publish_int(char* topic, int value) {
+    char buffer[128];
+    sprintf(buffer, "%d", value);
+    mqtt_publish(topic, buffer);
+}
+
+void mqtt_publish_float(char* topic, float value) {
+    char buffer[128];
+    sprintf(buffer, "%.2f", value);
+    mqtt_publish(topic, buffer);
+}

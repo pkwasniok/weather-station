@@ -22,18 +22,24 @@
 
 #define GPIO_I2C_SCL 3
 #define GPIO_I2C_SDA 5
-#define GPIO_UART_TX 39
-#define GPIO_UART_RX 37
+#define GPIO_PMS5003_TX 39
+#define GPIO_PMS5003_RX 37
+#define GPIO_PMS5003_MODE 35
 
 TaskHandle_t task_mqtt;
+TaskHandle_t task_bmp280;
+TaskHandle_t task_pms5003;
+
+bmp280_device_t bmp280;
+pms5003_device_t pms5003;
 
 int nvs_setup(void);
 int netif_setup(void);
+void bmp280_task(void* pvParameters);
+void pms5003_task(void* pvParameters);
 
 void app_main(void) {
     i2c_master_bus_handle_t i2c_bus;
-    bmp280_device_t bmp280;
-    pms5003_device_t pms5003;
 
     i2c_master_bus_config_t i2c_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -54,7 +60,8 @@ void app_main(void) {
     ESP_ERROR_CHECK(bmp280_init(&bmp280, &bmp280_config, i2c_bus));
     ESP_ERROR_CHECK(bmp280_set_power_mode(&bmp280, BMP280_POWER_MODE_NORMAL));
 
-    ESP_ERROR_CHECK(pms5003_init(&pms5003, UART_NUM_0, GPIO_UART_TX, GPIO_UART_RX));
+    ESP_ERROR_CHECK(pms5003_init(&pms5003, UART_NUM_0, GPIO_PMS5003_TX, GPIO_PMS5003_RX, GPIO_PMS5003_MODE));
+    ESP_ERROR_CHECK(pms5003_set_mode(&pms5003, PMS5003_MODE_SLEEP));
 
     ESP_ERROR_CHECK(nvs_setup());
     ESP_ERROR_CHECK(netif_setup());
@@ -62,35 +69,44 @@ void app_main(void) {
     ESP_ERROR_CHECK(mqtt_setup());
 
     xTaskCreate(mqtt_task, "mqtt", 2048, NULL, 10, &task_mqtt);
+    xTaskCreate(bmp280_task, "bmp280", 2048, NULL, 10, &task_bmp280);
+    xTaskCreate(pms5003_task, "pms5003", 2048, NULL, 10, &task_pms5003);
+}
+
+void bmp280_task(void* pvParameters) {
+    int32_t temperature;
+    uint32_t pressure;
 
     while (1) {
-        char buffer[128];
-
-        int32_t temperature;
         if (bmp280_get_temperature_degC_x100_int(&bmp280, &temperature) == BMP280_OK) {
-            sprintf(buffer, "%.2f", temperature / 100.0);
-            mqtt_publish("weather/temperature", buffer);
+            mqtt_publish_float("weather/temperature", temperature / 100.0);
         }
 
-        uint32_t pressure;
         if (bmp280_get_pressure_Pa_x1_int(&bmp280, &pressure) == BMP280_OK) {
-            sprintf(buffer, "%.2f", pressure / 100.0);
-            mqtt_publish("weather/pressure", buffer);
+            mqtt_publish_float("weather/pressure", pressure / 100.0);
         }
 
-        uint16_t pm1, pm2, pm10;
-        if (pms5003_read(&pms5003, &pm1, &pm2, &pm10) == PMS5003_OK) {
-            sprintf(buffer, "%d", pm1);
-            mqtt_publish("weather/pm1", buffer);
+        vTaskDelay((1 * 60 * 1000) / portTICK_PERIOD_MS);
+    }
+}
 
-            sprintf(buffer, "%d", pm2);
-            mqtt_publish("weather/pm2.5", buffer);
+void pms5003_task(void* pvParameters) {
+    uint16_t pm1, pm2, pm10;
 
-            sprintf(buffer, "%d", pm10);
-            mqtt_publish("weather/pm10", buffer);
+    while (1) {
+        pms5003_set_mode(&pms5003, PMS5003_MODE_NORMAL);
+
+        vTaskDelay((30 * 1000) / portTICK_PERIOD_MS);
+
+        if (pms5003_get_pm(&pms5003, &pm1, &pm2, &pm10) == PMS5003_OK) {
+            mqtt_publish_int("weather/pm1", pm1);
+            mqtt_publish_int("weather/pm2.5", pm2);
+            mqtt_publish_int("weather/pm10", pm10);
         }
 
-        vTaskDelay((1000 * 30) / portTICK_PERIOD_MS);
+        pms5003_set_mode(&pms5003, PMS5003_MODE_SLEEP);
+
+        vTaskDelay((10 * 60 * 1000) / portTICK_PERIOD_MS);
     }
 }
 
