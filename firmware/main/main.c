@@ -16,11 +16,14 @@
 #include "wifi.h"
 
 #include "bmp280.h"
+#include "pms5003.h"
 
 #define TAG "main"
 
 #define GPIO_I2C_SCL 3
 #define GPIO_I2C_SDA 5
+#define GPIO_UART_TX 39
+#define GPIO_UART_RX 37
 
 TaskHandle_t task_mqtt;
 
@@ -30,6 +33,7 @@ int netif_setup(void);
 void app_main(void) {
     i2c_master_bus_handle_t i2c_bus;
     bmp280_device_t bmp280;
+    pms5003_device_t pms5003;
 
     i2c_master_bus_config_t i2c_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -48,8 +52,9 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_config, &i2c_bus));
     ESP_ERROR_CHECK(bmp280_init(&bmp280, &bmp280_config, i2c_bus));
-
     ESP_ERROR_CHECK(bmp280_set_power_mode(&bmp280, BMP280_POWER_MODE_NORMAL));
+
+    ESP_ERROR_CHECK(pms5003_init(&pms5003, UART_NUM_0, GPIO_UART_TX, GPIO_UART_RX));
 
     ESP_ERROR_CHECK(nvs_setup());
     ESP_ERROR_CHECK(netif_setup());
@@ -59,19 +64,31 @@ void app_main(void) {
     xTaskCreate(mqtt_task, "mqtt", 2048, NULL, 10, &task_mqtt);
 
     while (1) {
-        int32_t temperature;
-        bmp280_get_temperature_degC_x100_int(&bmp280, &temperature);
-
-        uint32_t pressure;
-        bmp280_get_pressure_Pa_x1_int(&bmp280, &pressure);
-
         char buffer[128];
 
-        sprintf(buffer, "%.2f", temperature / 100.0);
-        mqtt_publish("weather/temperature", buffer);
+        int32_t temperature;
+        if (bmp280_get_temperature_degC_x100_int(&bmp280, &temperature) == BMP280_OK) {
+            sprintf(buffer, "%.2f", temperature / 100.0);
+            mqtt_publish("weather/temperature", buffer);
+        }
 
-        sprintf(buffer, "%.2f", pressure / 100.0);
-        mqtt_publish("weather/pressure", buffer);
+        uint32_t pressure;
+        if (bmp280_get_pressure_Pa_x1_int(&bmp280, &pressure) == BMP280_OK) {
+            sprintf(buffer, "%.2f", pressure / 100.0);
+            mqtt_publish("weather/pressure", buffer);
+        }
+
+        uint16_t pm1, pm2, pm10;
+        if (pms5003_read(&pms5003, &pm1, &pm2, &pm10) == PMS5003_OK) {
+            sprintf(buffer, "%d", pm1);
+            mqtt_publish("weather/pm1", buffer);
+
+            sprintf(buffer, "%d", pm2);
+            mqtt_publish("weather/pm2.5", buffer);
+
+            sprintf(buffer, "%d", pm10);
+            mqtt_publish("weather/pm10", buffer);
+        }
 
         vTaskDelay((1000 * 30) / portTICK_PERIOD_MS);
     }
