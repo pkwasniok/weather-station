@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "2025-09-15_16-29-17")(type "KiCad")(uri "${KIPRJMOD}/lib/symbols/2025-09-15_16-29-17.kicad_sym")(options "")(descr ""))
+  (lib (name "USB4125-GF-A")(type "KiCad")(uri "${KIPRJMOD}/lib/symbols/USB4125-GF-A.kicad_sym")(options "")(descr ""))
+)
