@@ -2975,7 +2975,7 @@
 		(dnp no)
 		(uuid "6abfbc06-7bad-4415-9f15-c804225f0b27")
 		(property "Reference" "R1"
-			(at 63.246 71.628 90)
+			(at 64.77 71.628 90)
 			(effects
 				(font
 					(size 1.27 1.27)
